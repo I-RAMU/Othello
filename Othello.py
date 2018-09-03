@@ -117,22 +117,86 @@ class Player:
 class CpuPlayer(Player):
     color = BLACK
     board = []
+    tmp_board = []
+    put_count = 0
+
+    board_weight_1 = [
+        [120, -20, 20, 5, 5, 20, -20, 120],
+        [-20, -40, -5, -5, -5, -5, -40, -20],
+        [20, -5, 15, 3, 3, 15, -5, -5, 20],
+        [5, -5, 3, 3, 3, 3, -5, 5],
+        [5, -5, 3, 3, 3, 3, -5, 5],
+        [20, -5, 15, 3, 3, 15, -5, -5, 20],
+        [-20, -40, -5, -5, -5, -5, -40, -20],
+        [120, -20, 20, 5, 5, 20, -20, 120]
+    ]
+    board_weight_2 = [
+        [30, -12, 0, -1, -1, 0, -12, 30],
+        [-12, -15, -3, -3, -3, -3, -15, -12],
+        [0, -3, 0, -1, -1, 0, -3, 0],
+        [-1, -3, -1, -1, -1, -1, -3, -1],
+        [-1, -3, -1, -1, -1, -1, -3, -1],
+        [0, -3, 0, -1, -1, 0, -3, 0],
+        [-12, -15, -3, -3, -3, -3, -15, -12],
+        [30, -12, 0, -1, -1, 0, -12, 30]
+    ]
 
     def __init__(self, color):
         self.color = color
 
     def put_stone(self):
-        while True:
-            x = random.randrange(BOARD_SIZE)
-            y = random.randrange(BOARD_SIZE)
-            if super().put_stone(x, y):
-                break
+        self.tmp_board = copy.deepcopy(self.board)
+        self.put_count += 1
+        eval_value = -255
+        ret_x = -1
+        ret_y = -1
+
+        for i in range(BOARD_SIZE):
+            for j in range(BOARD_SIZE):
+                if super().put_stone(j, i):
+                    score_tmp = self.eval_board()
+
+                    if eval_value < score_tmp:
+                        ret_x = j
+                        ret_y = i
+                        eval_value = score_tmp
+
+                    self.board = copy.deepcopy(self.tmp_board)
+
+        self.board = copy.deepcopy(self.tmp_board)
+        super().put_stone(ret_x, ret_y)
+        print("CPU Put @ (%d, %d)" % (ret_x + 1, ret_y + 1))
+
+    def eval_board(self):
+        score_black = 0
+        score_white = 0
+
+        for i in range(BOARD_SIZE):
+            for j in range(BOARD_SIZE):
+                if self.board[i][j] == NONE:
+                    continue
+                elif self.board[i][j] == BLACK:
+                    if self.put_count <= 5:
+                        score_black += self.board_weight_1[i][j]
+                    else:
+                        score_black += self.board_weight_2[i][j]
+                else:
+                    if self.put_count <= 5:
+                        score_white += self.board_weight_1[i][j]
+                    else:
+                        score_white += self.board_weight_2[i][j]
+
+        if self.color == BLACK:
+            return score_black - score_white
+        else:
+            return score_white - score_black
 
 
 class Othello:
     board = []
     player_1 = CpuPlayer(BLACK)
     player_2 = CpuPlayer(WHITE)
+    mode = 3
 
     def __init__(self):
         # Constructor
@@ -143,9 +207,50 @@ class Othello:
         self.board[4][3] = BLACK
         self.board[4][4] = WHITE
 
+        self.select_mode()
+
+        if self.mode == 1:
+            self.player_1 = Player(BLACK)
+            self.player_2 = Player(WHITE)
+        elif self.mode == 2:
+            self.player_1 = Player(BLACK)
+            self.player_2 = CpuPlayer(WHITE)
+        else:
+            self.player_1 = CpuPlayer(BLACK)
+            self.player_2 = CpuPlayer(WHITE)
+
+    def select_mode(self):
+        print("--------------------------")
+        print("Select Game Mode!")
+        print("1 : Player vs Player")
+        print("2 : Player vs CPU")
+        print("3 : CPU vs CPU")
+
+        while True:
+            print("Input -> ", end="")
+
+            try:
+                self.mode = int(input())
+            except ValueError:
+                continue
+            else:
+                if 0 < self.mode < 4:
+                    break
+                else:
+                    continue
+
+        print("--------------------------")
+
     def draw_board(self):
         # Draw Board
+        print("y\\x", end="")
         for i in range(BOARD_SIZE):
+            print(" %d " % (i+1), end="")
+
+        print()
+
+        for i in range(BOARD_SIZE):
+            print("% d" % (i+1), end=" ")
             for j in range(BOARD_SIZE):
                 if self.board[i][j] == BLACK:
                     print(" ○ ", end="")
@@ -165,29 +270,46 @@ class Othello:
         return False
 
     def input(self, player: Player):
-        while True:
-            print("Input Your Put")
-            print("x y -> ", end="")
-            x, y = [int(i) for i in input().split()]
-            x -= 1
-            y -= 1
-
-            if player.put_stone(x, y):
-                self.board = copy.deepcopy(player.provide_board())
-                break
-            else:
-                print("Sorry")
+        if type(player) is CpuPlayer:
+            player.put_stone()
+            self.board = copy.deepcopy(player.provide_board())
+        else:
+            while True:
+                print("Input Your Put")
+                print("x y -> ", end="")
+                try:
+                    x, y = [int(i) for i in input().split()]
+                    x -= 1
+                    y -= 1
+                except ValueError:
+                    continue
+                else:
+                    if 0 <= x < BOARD_SIZE and 0 <= y < BOARD_SIZE:
+                        if player.put_stone(x, y):
+                            self.board = copy.deepcopy(player.provide_board())
+                            break
+                        else:
+                            print("Sorry")
+                    else:
+                        continue
 
     def running(self):
         while True:
+            # Pass Check
+            self.player_1.get_board(self.board)
+            self.player_2.get_board(self.board)
+            if self.can_put(self.player_1) is False and self.can_put(self.player_2) is False:
+                print("\n")
+                self.draw_board()
+                print("Game End!")
+                break
+
             # Player-1 Move
             self.draw_board()
             self.player_1.get_board(self.board)
             p1_can_put = self.can_put(self.player_1)
             if p1_can_put:  # Pass Check
-                # self.input(self.player_1)
-                self.player_1.put_stone()
-                self.board = copy.deepcopy(self.player_1.provide_board())
+                self.input(self.player_1)
             else:
                 print("Player-1 is Pass")
 
@@ -198,16 +320,11 @@ class Othello:
             self.player_2.get_board(self.board)
             p2_can_put = self.can_put(self.player_2)
             if p2_can_put:  # Pass Check
-                # self.input(self.player_2)
-                self.player_2.put_stone()
-                self.board = copy.deepcopy(self.player_2.provide_board())
+                self.input(self.player_2)
             else:
                 print("Player-2 is Pass")
 
             print()  # \n
-
-            if p1_can_put is False and p2_can_put is False:
-                break
 
         self.game_result()
 
